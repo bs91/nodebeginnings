@@ -38,7 +38,6 @@ function broadcast(socket, sockets, writeData, excludeSelf) {
 
 function socketIndex(sockets, searchItem) {
   for (var i = 0; i < sockets.length; i++) {
-    console.log(typeof(searchItem));
     if (typeof(searchItem) === "string") {
       if (sockets[i].getName() === searchItem) {
         return i;
@@ -49,7 +48,38 @@ function socketIndex(sockets, searchItem) {
         return i;
       }
     }
-    return -1;
+  }
+  return -1
+}
+
+function userCommand(cmd, socket, sockets) {
+  var params = [];
+  if (cmd.indexOf(" ") !== -1) {
+    params = cmd.split(" ");
+    cmd = params.shift();
+  }
+  switch (cmd.toString().toLowerCase().trim()) {
+    case "help":
+      socket.write("nickname <newNick> (changes nickname to new nickname), users (prints a list of who is currently online)\n");
+      break;
+    case "nickname":
+      if (params[0]) {
+        var index = socketIndex(sockets, socket);
+        console.log(index);
+        sockets[index].setName(params[0].toString().trim());
+        console.log(sockets);
+      }
+      else {
+        socket.write("You must supply a new nickname, no change has occured.\n");
+      }
+      break;
+    case "users":
+      sockets.forEach(function(otherSocket) {
+        socket.write(otherSocket.getName().toString() + "\n");
+      });
+      break;
+    default:
+      socket.write("That isn't a valid command, try help for a list of commands.\n");
   }
 }
 
@@ -66,21 +96,25 @@ server.on('connection', function(socket) {
     date.getMilliseconds()
   ];
   var id = components.join("");
-  var identifier = 'user' + id;
+  sockets.push(new Socket('user' + id, socket));
+  var index = socketIndex(sockets, socket);
 
-  sockets.push(new Socket(identifier, socket));
-  broadcast(socket, sockets, identifier + " has connected!\n", false);
-
+  broadcast(socket, sockets,  sockets[index].getName() + " has connected!\n", false);
+  socket.write("You can issue commands with cmd: <command>, try help for a list of available commands.\n");
   socket.on('data', function(data) {
-    console.log(identifier + ': ' +  data.toString());
-    broadcast(socket, sockets, identifier.toString() + ": " +  data.toString(), true);
+    console.log(sockets[index].getName() + ': ' +  data.toString());
+    if(data.toString().indexOf('cmd: ') === 0) {
+      var command = data.toString().substring(5);
+      userCommand(command, socket, sockets);
+      return
+    }
+    broadcast(socket, sockets, sockets[index].getName() + ": " +  data.toString() + "\n", true);
   });
   
   socket.on('close', function() {
     console.log('connection closed');
-    var index = socketIndex(sockets, socket);
+    broadcast(socket, sockets, sockets[index].getName() + " has disconnected!\n", false);
     sockets.splice(index, 1);
-    broadcast(socket, sockets, identifier.toString() + " has disconnected!\n", false);
   });
 
   socket.on('error', function(err) {
