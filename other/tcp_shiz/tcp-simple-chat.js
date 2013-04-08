@@ -21,38 +21,22 @@ Socket.prototype = {
     this.socket = newSocket;
   }
 }
-var sockets = [];
+var sockets = {};
 
 function broadcast(socket, sockets, writeData, excludeSelf) {
-  sockets.forEach(function(otherSocket) {
+  Object.keys(sockets).forEach(function(id){
     if (excludeSelf) {
-      if (otherSocket.getSocket() !== socket) {
-        otherSocket.getSocket().write(writeData);
+      if (sockets[id].getSocket() !== socket) {
+        sockets[id].getSocket().write(writeData);
       }
     }
     else {
-      otherSocket.getSocket().write(writeData);
+      sockets[id].getSocket().write(writeData);
     }
   });
 }
 
-function socketIndex(sockets, searchItem) {
-  for (var i = 0; i < sockets.length; i++) {
-    if (typeof(searchItem) === "string") {
-      if (sockets[i].getName() === searchItem) {
-        return i;
-      }
-    }
-    else {
-      if (sockets[i].getSocket() === searchItem) {
-        return i;
-      }
-    }
-  }
-  return -1
-}
-
-function userCommand(cmd, socket, sockets) {
+function userCommand(cmd, socket, sockets, id) {
   var params = [];
   if (cmd.indexOf(" ") !== -1) {
     params = cmd.split(" ");
@@ -64,18 +48,15 @@ function userCommand(cmd, socket, sockets) {
       break;
     case "nickname":
       if (params[0]) {
-        var index = socketIndex(sockets, socket);
-        console.log(index);
-        sockets[index].setName(params[0].toString().trim());
-        console.log(sockets);
+        sockets[id].setName(params[0].toString().trim());
       }
       else {
         socket.write("You must supply a new nickname, no change has occured.\n");
       }
       break;
     case "users":
-      sockets.forEach(function(otherSocket) {
-        socket.write(otherSocket.getName().toString() + "\n");
+      Object.keys(sockets).forEach(function(id) {
+        socket.write(sockets[id].getName().toString() + "\n");
       });
       break;
     default:
@@ -96,25 +77,24 @@ server.on('connection', function(socket) {
     date.getMilliseconds()
   ];
   var id = components.join("");
-  sockets.push(new Socket('user' + id, socket));
-  var index = socketIndex(sockets, socket);
+  sockets[id] = new Socket('user' + id, socket);
 
-  broadcast(socket, sockets,  sockets[index].getName() + " has connected!\n", false);
+  broadcast(socket, sockets,  sockets[id].getName() + " has connected!\n", false);
   socket.write("You can issue commands with cmd: <command>, try help for a list of available commands.\n");
   socket.on('data', function(data) {
-    console.log(sockets[index].getName() + ': ' +  data.toString());
+    console.log(sockets[id].getName() + ': ' +  data.toString());
     if(data.toString().indexOf('cmd: ') === 0) {
       var command = data.toString().substring(5);
-      userCommand(command, socket, sockets);
+      userCommand(command, socket, sockets, id);
       return
     }
-    broadcast(socket, sockets, sockets[index].getName() + ": " +  data.toString() + "\n", true);
+    broadcast(socket, sockets, sockets[id].getName() + ": " +  data, true);
   });
   
   socket.on('close', function() {
     console.log('connection closed');
-    broadcast(socket, sockets, sockets[index].getName() + " has disconnected!\n", false);
-    sockets.splice(index, 1);
+    broadcast(socket, sockets, sockets[id].getName() + " has disconnected!\n", false);
+    delete sockets[id];
   });
 
   socket.on('error', function(err) {
